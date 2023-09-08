@@ -1,0 +1,8 @@
+.vscode/
+build/
+certs/
+deploy/
+debug
+vendor/
+__debug*
+version.txt

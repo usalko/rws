@@ -1,0 +1,30 @@
+#!/bin/bash
+
+COMMAND=$1
+
+if [ $COMMAND == "build" ]; then
+    docker build -f Dockerfile -t usalko/rws:1.0.0 . --progress=plain
+fi
+
+if [ $COMMAND == "publish" ]; then
+    IMAGE=usalko/rws:1.0.0
+    docker push "$IMAGE" || {
+        echo "Line 274: Error in push to dockerhub image $IMAGE... Exit..."
+        exit 1
+    }
+fi
+
+if [ $COMMAND == "test" ]; then
+    curl --include \
+        --no-buffer \
+        --header "Connection: Upgrade" \
+        --header "Upgrade: websocket" \
+        --header "Host: localhost:8801" \
+        --header "Origin: http://localhost:8801" \
+        --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+        --header "Sec-WebSocket-Version: 13" \
+        http://localhost:8801/ws
+fi
+
+
+

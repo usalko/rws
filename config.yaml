@@ -1,0 +1,27 @@
+schema.version: "1.0"
+# tls.cert.file: ./certs/mydomain.crt
+# tls.key.file: ./certs/mydomain.key
+redis.to.websocket:
+  # first Redis config entry
+  - redis.client.config:
+      metadata.broker.list: redis1:9092,redis2:9094 # required
+      group.id: k2ws-test-group
+    redis.default.stream.config:
+      auto.offset.reset: earliest # default is "largest"
+    redis.streams:
+      - test1
+      - test2
+    address: :8800
+    endpoint.prefix: ws # default is ""
+
+  # second Redis config entry
+  - redis.client.config:
+      metadata.broker.list: redis1:9092,redis2:9094
+      # group.id is not defined so client should set group.id by passing `group.id` query parameter
+      enable.auto.commit: false # default is `true`
+    # redis.streams is not defined so client should set stream(s) by passing comma separated list of streams to `streams` query parameter
+    address: :8801 # it would be fine to use the same port 8888 too
+    endpoint.websocket: ws # default is ""
+    endpoint.test: "" # default is "test"
+    include.headers: true # default is `false`
+    message.type: json # default is "json"
