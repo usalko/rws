@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"log"
@@ -26,8 +27,8 @@ type RWS struct {
 
 // RWSRedis Redis config
 type RWSRedis struct {
-	RedisClientConfig        redis.ConfigMap
-	RedisDefaultStreamConfig redis.ConfigMap
+	RedisClientConfig        redis.Options
+	RedisDefaultStreamConfig redis.Options
 	RedisStreams             []string
 	MessageDetails           bool
 	MessageType              string
@@ -72,12 +73,15 @@ func (rws *RWS) Start() error {
 	return http.ListenAndServe(rws.Address, rws)
 }
 
-func copyConfigMap(m redis.ConfigMap) redis.ConfigMap {
-	nm := make(redis.ConfigMap)
-	for k, v := range m {
-		nm[k] = v
-	}
+func copyConfigMap(options redis.Options) redis.Options {
+	nm := options
 	return nm
+}
+
+// Event generic interface
+type Event interface {
+	// String returns a human-readable representation of the event
+	// String() string
 }
 
 func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -113,10 +117,10 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			testTemplate.Execute(w, templateInfo{strings.TrimRight(r.URL.Path, "/"), wsURL})
 		}
 		return
-	} else if kcfg, exists := rws.WebSockets[r.URL.Path]; exists {
+	} else if rcfg, exists := rws.WebSockets[r.URL.Path]; exists {
 
 		upgrader := ws.HTTPUpgrader{}
-		if kcfg.Compression {
+		if rcfg.Compression {
 			e := wsflate.Extension{
 				// We are using default parameters here since we use
 				// wsflate.{Compress,Decompress}Frame helpers below in the code.
@@ -137,21 +141,22 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Read redis params from query string
 		query := r.URL.Query()
-		config := copyConfigMap(kcfg.RedisClientConfig)
+		config := copyConfigMap(rcfg.RedisClientConfig)
 		// config["debug"] = "protocol"
 		// config["broker.version.fallback"] = "0.8.0"
-		config["session.timeout.ms"] = 6000
-		config["go.events.channel.enable"] = true
-		config["go.application.rebalance.enable"] = true
-		if config["group.id"] == nil {
-			config["group.id"] = parseQueryString(query, "group.id", "")
-		}
-		defStream := copyConfigMap(kcfg.RedisDefaultStreamConfig)
-		if defStream["auto.offset.reset"] == nil {
-			defStream["auto.offset.reset"] = parseQueryString(query, "auto.offset.reset", "")
-		}
-		config["default.stream.config"] = defStream
-		streams := kcfg.RedisStreams
+		// config["session.timeout.ms"] = 6000
+		// config["go.events.channel.enable"] = true
+		// config["go.application.rebalance.enable"] = true
+		// if config["group.id"] == nil {
+		// 	config["group.id"] = parseQueryString(query, "group.id", "")
+		// }
+		// defStream := copyConfigMap(rcfg.RedisDefaultStreamConfig)
+		// if defStream["auto.offset.reset"] == nil {
+		// 	defStream["auto.offset.reset"] = parseQueryString(query, "auto.offset.reset", "")
+		// }
+		// config["default.stream.config"] = defStream
+
+		streams := rcfg.RedisStreams
 		if len(streams) == 0 {
 			if t := parseQueryString(query, "streams", ""); t != "" {
 				streams = strings.Split(t, ",")
@@ -162,25 +167,11 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Instantiate client
-		client, err := redis.NewClient(&config)
-		if err != nil {
-			fmt.Printf("Can't create client: %v\n", err)
-			return
-		}
+		client := redis.NewClient(&config)
 		defer client.Close()
 
-		// Make sure all streams actually exist
-		meta, err := client.GetMetadata(nil, true, 5000)
-		if err != nil {
-			fmt.Printf("Can't get metadata: %v\n", err)
-			return
-		}
-		for _, stream := range streams {
-			if _, exists := meta.Streams[stream]; !exists {
-				log.Printf("Stream [%s] doesn't exist", stream)
-				return
-			}
-		}
+		// Context
+		ctx := context.Background()
 
 		// Make sure to read client message and react on close/error
 		chClose := make(chan bool)
@@ -202,16 +193,27 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		// Subscribe client to the streams
-		err = client.SubscribeStreams(streams, nil)
-		if err != nil {
-			fmt.Printf("Can't subscribe client: %v\n", err)
-			return
-		}
-		defer client.Unsubscribe()
+		chEvent := make(chan Event)
+
+		go func() {
+			defer client.Close()
+
+			for {
+				xStreams, err := client.XReadStreams(ctx, streams...).Result()
+				if err != nil {
+					fmt.Printf("Can't read streams: %v\n", err)
+					chEvent <- err
+					return
+				}
+				for _, xStream := range xStreams {
+					chEvent <- xStream.Messages
+				}
+			}
+		}()
 
 		log.Printf("Websocket opened %s\n", r.Host)
 		// websocketMessageType := ws.TextMessage
-		// if kcfg.MessageType == "binary" {
+		// if rcfg.MessageType == "binary" {
 		// 	websocketMessageType = ws.BinaryMessage
 		// }
 		running := true
@@ -221,23 +223,19 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Exit if websocket read fails
 			case <-chClose:
 				running = false
-			case ev := <-client.Events():
+			case ev := <-chEvent:
 				switch e := ev.(type) {
-				case redis.AssignedPartitions:
-					client.Assign(e.Partitions)
-				case redis.RevokedPartitions:
-					client.Unassign()
-				case *redis.Message:
-					if kcfg.MessageDetails {
-						val, err2 := JSONBytefy(e, kcfg.MessageType)
+				case *redis.XMessage:
+					if rcfg.MessageDetails {
+						val, err2 := JSONBytesMake(e, rcfg.MessageType)
 						if err2 == nil {
 							err = wsutil.WriteServerMessage(wscon, ws.OpBinary, val)
 						} else {
-							err = wsutil.WriteServerMessage(wscon, ws.OpBinary, e.Value)
+							err = wsutil.WriteServerMessage(wscon, ws.OpBinary, []byte("e.Values"))
 						}
 
 					} else {
-						err = wsutil.WriteServerMessage(wscon, ws.OpBinary, e.Value)
+						err = wsutil.WriteServerMessage(wscon, ws.OpBinary, []byte("e.Values"))
 					}
 					if err != nil {
 						// handle error
@@ -245,8 +243,6 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						log.Printf("WebSocket write error: %v (%v)\n", err, e)
 						running = false
 					}
-				case redis.PartitionEOF:
-					// log.Printf("%% Reached %v\n", e)
 				case redis.Error:
 					log.Printf("%% Error: %v\n", e)
 					err = wscon.Close()

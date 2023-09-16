@@ -4,7 +4,7 @@ schema.version: "1.0"
 redis.to.websocket:
   # first Redis config entry
   - redis.client.config:
-      metadata.broker.list: redis1:9092,redis2:9094 # required
+      metadata.broker.list: redis:6379 # required
       group.id: k2ws-test-group
     redis.default.stream.config:
       auto.offset.reset: earliest # default is "largest"
@@ -16,7 +16,7 @@ redis.to.websocket:
 
   # second Redis config entry
   - redis.client.config:
-      metadata.broker.list: redis1:9092,redis2:9094
+      metadata.broker.list: redis:6379
       # group.id is not defined so client should set group.id by passing `group.id` query parameter
       enable.auto.commit: false # default is `true`
     # redis.streams is not defined so client should set stream(s) by passing comma separated list of streams to `streams` query parameter

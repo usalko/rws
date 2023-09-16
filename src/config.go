@@ -37,16 +37,16 @@ redis.to.websocket:
 
 // ConfigRWS Redis to websocket YAML
 type ConfigRWS struct {
-	RedisClientConfig        redis.ConfigMap `yaml:"redis.client.config"`
-	RedisDefaultStreamConfig redis.ConfigMap `yaml:"redis.default.stream.config"`
-	RedisStreams             []string        `yaml:"redis.streams"`
-	Address                  string          `yaml:"address"`
-	EndpointPrefix           string          `yaml:"endpoint.prefix"`
-	EndpointTest             string          `yaml:"endpoint.test"`
-	EndpointWS               string          `yaml:"endpoint.websocket"`
-	MessageDetails           bool            `yaml:"message.details"`
-	MessageType              string          `yaml:"message.type"`
-	Compression              bool            `yaml:"compression"`
+	RedisClientConfig        redis.Options `yaml:"redis.client.config"`
+	RedisDefaultStreamConfig redis.Options `yaml:"redis.default.stream.config"`
+	RedisStreams             []string      `yaml:"redis.streams"`
+	Address                  string        `yaml:"address"`
+	EndpointPrefix           string        `yaml:"endpoint.prefix"`
+	EndpointTest             string        `yaml:"endpoint.test"`
+	EndpointWS               string        `yaml:"endpoint.websocket"`
+	MessageDetails           bool          `yaml:"message.details"`
+	MessageType              string        `yaml:"message.type"`
+	Compression              bool          `yaml:"compression"`
 }
 
 // Config YAML config file
@@ -118,12 +118,12 @@ func ReadRWS(filename string) []*RWS {
 		if testPath == wsPath {
 			panic(fmt.Sprintf("test path and websocket path can't be same [%s]", rwsc.EndpointTest))
 		}
-		if rwsc.RedisClientConfig["metadata.broker.list"] == "" {
+		if rwsc.RedisClientConfig.Addr == "" {
 			panic(fmt.Sprintf("metadata.broker.list must be defined, address [%s]", rwsc.Address))
 		}
-		if rwsc.RedisClientConfig["group.id"] == "" {
-			panic(fmt.Sprintf("group.id must be defined, address [%s]", rwsc.Address))
-		}
+		// if rwsc.RedisClientConfig["group.id"] == "" {
+		// 	panic(fmt.Sprintf("group.id must be defined, address [%s]", rwsc.Address))
+		// }
 		if _, exists := rws.TestUIs[testPath]; exists {
 			panic(fmt.Sprintf("test path [%s] already defined", testPath))
 		}
