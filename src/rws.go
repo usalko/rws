@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -201,16 +202,40 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer client.Close()
 
-			idsOffset := len(streams)
+			if len(streams) == 0 {
+				chError <- errors.New("no streams for listening")
+				return
+			}
+
+			// Filter for existing streams
+			streamsRequest := make([]string, 0)
+			for _, stream := range streams {
+				existedStreams, _, err := client.Scan(ctx, 0, stream, -1).Result()
+				if err != nil {
+					fmt.Printf("Can't read streams %v: %v\n", streams, err)
+					chError <- err
+					return
+				}
+				fmt.Printf("Success scan the stream: %v", stream)
+				streamsRequest = append(streamsRequest, existedStreams...)
+			}
+
+			if len(streamsRequest) == 0 {
+				errorDescription := fmt.Sprintf("The streams: %v not found in redis\n", streams)
+				chError <- errors.New(errorDescription)
+				return
+			}
+
+			idsOffset := len(streamsRequest)
 			ids := make([]string, idsOffset)
-			for i := 0; i < len(streams); i++ {
+			for i := 0; i < len(streamsRequest); i++ {
 				ids[i] = "0" // '$' argument see redis documentation
 			}
-			streams = append(streams, ids...)
+			streamsRequest = append(streamsRequest, ids...)
 			for {
 				xStreams, err := client.XRead(ctx, &redis.XReadArgs{
-					Streams: streams,
-					Block:   1000,
+					Streams: streamsRequest,
+					Block:   0,
 				}).Result()
 				if err != nil {
 					fmt.Printf("Can't read streams %v: %v\n", streams, err)
@@ -234,14 +259,18 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case ev := <-chError:
 				switch e := ev.(type) {
 				case redis.Error:
-					log.Printf("%% Error: %v\n", e)
+					if e.Error() == "redis: nil" {
+						log.Printf("%% Error: %v perhaps stream(s) %v didn't exists\n", e, streams)
+					} else {
+						log.Printf("%% Error: %v\n", e)
+					}
 					err = wsConnection.Close()
 					if err != nil {
 						log.Printf("Error while closing WebSocket: %v\n", e)
 					}
 					running = false
 				default:
-					log.Printf("Unknown error type: %v", e)
+					log.Printf("Error type: %v", ev)
 					err = wsConnection.Close()
 					if err != nil {
 						log.Printf("Error while closing WebSocket: %v\n", e)
