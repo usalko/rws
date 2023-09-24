@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/redis/go-redis/v9"
-
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -19,11 +17,9 @@ const initConfig = `schema.version: "1.0"
 redis.to.websocket:
   - redis.client.config:
       # https://github.com/edenhill/librdredis/blob/master/CONFIGURATION.md#global-configuration-properties
-      metadata.broker.list: localhost:9092
-      enable.auto.commit: false
+      metadata.broker.list: localhost:6379
       group.id: my-redis-group
     redis.default.stream.config:
-      # https://github.com/edenhill/librdredis/blob/master/CONFIGURATION.md#stream-configuration-properties
       auto.offset.reset: latest
     redis.streams:
       - my.redis.stream
@@ -37,16 +33,15 @@ redis.to.websocket:
 
 // ConfigRWS Redis to websocket YAML
 type ConfigRWS struct {
-	RedisClientConfig        redis.Options `yaml:"redis.client.config"`
-	RedisDefaultStreamConfig redis.Options `yaml:"redis.default.stream.config"`
-	RedisStreams             []string      `yaml:"redis.streams"`
-	Address                  string        `yaml:"address"`
-	EndpointPrefix           string        `yaml:"endpoint.prefix"`
-	EndpointTest             string        `yaml:"endpoint.test"`
-	EndpointWS               string        `yaml:"endpoint.websocket"`
-	MessageDetails           bool          `yaml:"message.details"`
-	MessageType              string        `yaml:"message.type"`
-	Compression              bool          `yaml:"compression"`
+	RedisClientConfig        map[string]interface{} `yaml:"redis.client.config"`
+	RedisDefaultStreamConfig map[string]interface{} `yaml:"redis.default.stream.config"`
+	RedisStreams             []string               `yaml:"redis.streams"`
+	Address                  string                 `yaml:"address"`
+	EndpointPrefix           string                 `yaml:"endpoint.prefix"`
+	EndpointTest             string                 `yaml:"endpoint.test"`
+	EndpointWS               string                 `yaml:"endpoint.websocket"`
+	MessageType              string                 `yaml:"message.type"`
+	Compression              bool                   `yaml:"compression"`
 }
 
 // Config YAML config file
@@ -70,10 +65,11 @@ func ReadRWS(filename string) []*RWS {
 	if err != nil {
 		log.Fatalf("Unmarshal: %v", err)
 	}
+
 	certFile := ""
 	keyFile := ""
 	if config.TLSCertFile != "" && config.TLSKeyFile == "" || config.TLSCertFile == "" && config.TLSKeyFile != "" {
-		panic(fmt.Sprintf("Both certificate and key file must be defined"))
+		panic(fmt.Sprintf("Both certificate and key file must be defined %v", "."))
 	} else if config.TLSCertFile != "" {
 		if _, err := os.Stat(config.TLSCertFile); err == nil {
 			if _, err := os.Stat(config.TLSKeyFile); err == nil {
@@ -87,42 +83,43 @@ func ReadRWS(filename string) []*RWS {
 		}
 	}
 	rwsMap := make(map[string]*RWS)
-	for _, rwsc := range config.ConfigRWSs {
+	for _, rwsConfig := range config.ConfigRWSs {
 		var rws *RWS
 		var exists bool
-		if rws, exists = rwsMap[rwsc.Address]; !exists {
+		if rws, exists = rwsMap[rwsConfig.Address]; !exists {
 			rws = &RWS{
-				Address:     rwsc.Address,
+				Address:     rwsConfig.Address,
 				TLSCertFile: certFile,
 				TLSKeyFile:  keyFile,
+				SourceFile:  filename,
 				WebSockets:  make(map[string]*RWSRedis),
 				TestUIs:     make(map[string]*string),
 			}
-			rwsMap[rwsc.Address] = rws
+			rwsMap[rwsConfig.Address] = rws
 		}
-		if rwsc.MessageType == "" {
-			rwsc.MessageType = "json"
+		if rwsConfig.MessageType == "" {
+			rwsConfig.MessageType = "json"
 		}
-		testPath := rwsc.EndpointTest
-		wsPath := rwsc.EndpointWS
+		testPath := rwsConfig.EndpointTest
+		wsPath := rwsConfig.EndpointWS
 		if testPath == "" && wsPath == "" {
 			testPath = "test"
 		}
-		if rwsc.EndpointPrefix != "" {
-			testPath = rwsc.EndpointPrefix + "/" + testPath
-			wsPath = rwsc.EndpointPrefix + "/" + wsPath
+		if rwsConfig.EndpointPrefix != "" {
+			testPath = rwsConfig.EndpointPrefix + "/" + testPath
+			wsPath = rwsConfig.EndpointPrefix + "/" + wsPath
 		}
 		testPath = "/" + strings.TrimRight(testPath, "/")
 		wsPath = "/" + strings.TrimRight(wsPath, "/")
 
 		if testPath == wsPath {
-			panic(fmt.Sprintf("test path and websocket path can't be same [%s]", rwsc.EndpointTest))
+			panic(fmt.Sprintf("test path and websocket path can't be same [%s]", rwsConfig.EndpointTest))
 		}
-		if rwsc.RedisClientConfig.Addr == "" {
-			panic(fmt.Sprintf("metadata.broker.list must be defined, address [%s]", rwsc.Address))
+		if rwsConfig.RedisClientConfig["metadata.broker.list"] == "" {
+			panic(fmt.Sprintf("metadata.broker.list must be defined, address [%s]", rwsConfig.Address))
 		}
-		// if rwsc.RedisClientConfig["group.id"] == "" {
-		// 	panic(fmt.Sprintf("group.id must be defined, address [%s]", rwsc.Address))
+		// if rwsConfig.RedisClientConfig["group.id"] == "" {
+		// 	panic(fmt.Sprintf("group.id must be defined, address [%s]", rwsConfig.Address))
 		// }
 		if _, exists := rws.TestUIs[testPath]; exists {
 			panic(fmt.Sprintf("test path [%s] already defined", testPath))
@@ -136,26 +133,25 @@ func ReadRWS(filename string) []*RWS {
 		if _, exists := rws.TestUIs[wsPath]; exists {
 			panic(fmt.Sprintf("websocket path [%s] already defined as test path", wsPath))
 		}
-		if rwsc.MessageType != "json" &&
-			rwsc.MessageType != "text" &&
-			rwsc.MessageType != "binary" {
-			panic(fmt.Sprintf("invalid message.type [%s]", rwsc.MessageType))
+		if rwsConfig.MessageType != "json" &&
+			rwsConfig.MessageType != "text" &&
+			rwsConfig.MessageType != "binary" {
+			panic(fmt.Sprintf("invalid message.type [%s]", rwsConfig.MessageType))
 		}
 		rws.TestUIs[testPath] = &wsPath
 		rws.WebSockets[wsPath] = &RWSRedis{
-			RedisClientConfig:        rwsc.RedisClientConfig,
-			RedisDefaultStreamConfig: rwsc.RedisDefaultStreamConfig,
-			RedisStreams:             rwsc.RedisStreams,
-			MessageDetails:           rwsc.MessageDetails,
-			MessageType:              rwsc.MessageType,
-			Compression:              rwsc.Compression,
+			RedisClientConfig:        rwsConfig.RedisClientConfig,
+			RedisDefaultStreamConfig: rwsConfig.RedisDefaultStreamConfig,
+			RedisStreams:             rwsConfig.RedisStreams,
+			MessageType:              rwsConfig.MessageType,
+			Compression:              rwsConfig.Compression,
 		}
 	}
-	rwss := make([]*RWS, len(rwsMap))
+	rwsSlice := make([]*RWS, len(rwsMap))
 	i := 0
 	for _, rws := range rwsMap {
-		rwss[i] = rws
+		rwsSlice[i] = rws
 		i++
 	}
-	return rwss
+	return rwsSlice
 }

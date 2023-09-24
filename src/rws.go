@@ -21,21 +21,21 @@ type RWS struct {
 	Address     string
 	TLSCertFile string
 	TLSKeyFile  string
+	SourceFile  string
 	WebSockets  map[string]*RWSRedis
 	TestUIs     map[string]*string
 }
 
 // RWSRedis Redis config
 type RWSRedis struct {
-	RedisClientConfig        redis.Options
-	RedisDefaultStreamConfig redis.Options
+	RedisClientConfig        map[string]interface{}
+	RedisDefaultStreamConfig map[string]interface{}
 	RedisStreams             []string
-	MessageDetails           bool
 	MessageType              string
 	Compression              bool
 }
 
-type templateInfo struct {
+type TemplateInfo struct {
 	TestPath, WSURL string
 }
 
@@ -56,14 +56,14 @@ var mimeTypes = map[string]string{
 	".pdf":  "application/pdf",
 }
 
-func parseQueryString(query url.Values, key string, val string) string {
-	if val == "" {
-		if vals, exists := query[key]; exists && len(vals) > 0 {
-			return vals[0]
-		}
-	}
-	return val
-}
+// func parseQueryString(query url.Values, key string, val string) string {
+// 	if val == "" {
+// 		if values, exists := query[key]; exists && len(values) > 0 {
+// 			return values[0]
+// 		}
+// 	}
+// 	return val
+// }
 
 // Start start websocket and start consuming from Redis stream(s)
 func (rws *RWS) Start() error {
@@ -73,15 +73,32 @@ func (rws *RWS) Start() error {
 	return http.ListenAndServe(rws.Address, rws)
 }
 
-func copyConfigMap(options redis.Options) redis.Options {
-	nm := options
-	return nm
+// config["debug"] = "protocol"
+// config["broker.version.fallback"] = "0.8.0"
+// config["session.timeout.ms"] = 6000
+// config["go.events.channel.enable"] = true
+// config["go.application.rebalance.enable"] = true
+// if config["group.id"] == nil {
+// 	config["group.id"] = parseQueryString(query, "group.id", "")
+// }
+// defStream := copyConfigMap(rcfg.RedisDefaultStreamConfig)
+// if defStream["auto.offset.reset"] == nil {
+// 	defStream["auto.offset.reset"] = parseQueryString(query, "auto.offset.reset", "")
+// }
+// config["default.stream.config"] = defStream
+
+func redisOptionsFromRwsConfiguration(redisClientConfig map[string]interface{}, query url.Values) redis.Options {
+	return redis.Options{
+		Addr: fmt.Sprint(redisClientConfig["metadata.broker.list"]),
+	}
 }
 
-// Event generic interface
-type Event interface {
-	// String returns a human-readable representation of the event
-	// String() string
+func redisStreams(query url.Values, defaultStreams []string) []string {
+	streams := query.Get("topics")
+	if streams != "" {
+		return strings.Split(streams, ",")
+	}
+	return defaultStreams
 }
 
 func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -114,13 +131,13 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if testTemplate == nil || localStatic {
 				testTemplate = template.Must(template.New("").Parse(html))
 			}
-			testTemplate.Execute(w, templateInfo{strings.TrimRight(r.URL.Path, "/"), wsURL})
+			testTemplate.Execute(w, TemplateInfo{strings.TrimRight(r.URL.Path, "/"), wsURL})
 		}
 		return
-	} else if rcfg, exists := rws.WebSockets[r.URL.Path]; exists {
+	} else if rwsConfig, exists := rws.WebSockets[r.URL.Path]; exists {
 
-		upgrader := ws.HTTPUpgrader{}
-		if rcfg.Compression {
+		upGrader := ws.HTTPUpgrader{}
+		if rwsConfig.Compression {
 			e := wsflate.Extension{
 				// We are using default parameters here since we use
 				// wsflate.{Compress,Decompress}Frame helpers below in the code.
@@ -128,11 +145,11 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// implementation.
 				Parameters: wsflate.DefaultParameters,
 			}
-			upgrader = ws.HTTPUpgrader{
+			upGrader = ws.HTTPUpgrader{
 				Negotiate: e.Negotiate,
 			}
 		}
-		wscon, _, _, err := upgrader.Upgrade(r, w)
+		wsConnection, _, _, err := upGrader.Upgrade(r, w)
 
 		if err != nil {
 			log.Printf("Websocket http upgrade failed: %v\n", err)
@@ -141,33 +158,16 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Read redis params from query string
 		query := r.URL.Query()
-		config := copyConfigMap(rcfg.RedisClientConfig)
-		// config["debug"] = "protocol"
-		// config["broker.version.fallback"] = "0.8.0"
-		// config["session.timeout.ms"] = 6000
-		// config["go.events.channel.enable"] = true
-		// config["go.application.rebalance.enable"] = true
-		// if config["group.id"] == nil {
-		// 	config["group.id"] = parseQueryString(query, "group.id", "")
-		// }
-		// defStream := copyConfigMap(rcfg.RedisDefaultStreamConfig)
-		// if defStream["auto.offset.reset"] == nil {
-		// 	defStream["auto.offset.reset"] = parseQueryString(query, "auto.offset.reset", "")
-		// }
-		// config["default.stream.config"] = defStream
+		options := redisOptionsFromRwsConfiguration(rwsConfig.RedisClientConfig, query)
 
-		streams := rcfg.RedisStreams
+		streams := redisStreams(query, rwsConfig.RedisStreams)
 		if len(streams) == 0 {
-			if t := parseQueryString(query, "streams", ""); t != "" {
-				streams = strings.Split(t, ",")
-			} else {
-				log.Printf("No stream(s)")
-				return
-			}
+			log.Printf("No stream(s), please setup 'default.stream.config' section in configuration (%s) or pass topic(s) as query parameter.", rws.SourceFile)
+			return
 		}
 
 		// Instantiate client
-		client := redis.NewClient(&config)
+		client := redis.NewClient(&options)
 		defer client.Close()
 
 		// Context
@@ -177,10 +177,10 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		chClose := make(chan bool)
 
 		go func() {
-			defer wscon.Close()
+			defer wsConnection.Close()
 
 			for {
-				_, _, err := wsutil.ReadClientData(wscon)
+				_, _, err := wsutil.ReadClientData(wsConnection)
 				if err != nil {
 					// handle error
 					chClose <- true
@@ -192,30 +192,38 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		// Subscribe client to the streams
-		chEvent := make(chan Event)
+		// Subscribe client to the stream messages
+		chStream := make(chan redis.XStream)
+
+		// Subscribe client to the errors
+		chError := make(chan error)
 
 		go func() {
 			defer client.Close()
 
+			idsOffset := len(streams)
+			ids := make([]string, idsOffset)
+			for i := 0; i < len(streams); i++ {
+				ids[i] = "0" // '$' argument see redis documentation
+			}
+			streams = append(streams, ids...)
 			for {
-				xStreams, err := client.XReadStreams(ctx, streams...).Result()
+				xStreams, err := client.XRead(ctx, &redis.XReadArgs{
+					Streams: streams,
+					Block:   1000,
+				}).Result()
 				if err != nil {
-					fmt.Printf("Can't read streams: %v\n", err)
-					chEvent <- err
+					fmt.Printf("Can't read streams %v: %v\n", streams, err)
+					chError <- err
 					return
 				}
 				for _, xStream := range xStreams {
-					chEvent <- xStream.Messages
+					chStream <- xStream
 				}
 			}
 		}()
 
 		log.Printf("Websocket opened %s\n", r.Host)
-		// websocketMessageType := ws.TextMessage
-		// if rcfg.MessageType == "binary" {
-		// 	websocketMessageType = ws.BinaryMessage
-		// }
 		running := true
 		// Keep reading and sending messages
 		for running {
@@ -223,33 +231,41 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Exit if websocket read fails
 			case <-chClose:
 				running = false
-			case ev := <-chEvent:
+			case ev := <-chError:
 				switch e := ev.(type) {
-				case *redis.XMessage:
-					if rcfg.MessageDetails {
-						val, err2 := JSONBytesMake(e, rcfg.MessageType)
-						if err2 == nil {
-							err = wsutil.WriteServerMessage(wscon, ws.OpBinary, val)
-						} else {
-							err = wsutil.WriteServerMessage(wscon, ws.OpBinary, []byte("e.Values"))
-						}
-
-					} else {
-						err = wsutil.WriteServerMessage(wscon, ws.OpBinary, []byte("e.Values"))
-					}
-					if err != nil {
-						// handle error
-						chClose <- true
-						log.Printf("WebSocket write error: %v (%v)\n", err, e)
-						running = false
-					}
 				case redis.Error:
 					log.Printf("%% Error: %v\n", e)
-					err = wscon.Close()
+					err = wsConnection.Close()
 					if err != nil {
 						log.Printf("Error while closing WebSocket: %v\n", e)
 					}
 					running = false
+				default:
+					log.Printf("Unknown error type: %v", e)
+					err = wsConnection.Close()
+					if err != nil {
+						log.Printf("Error while closing WebSocket: %v\n", e)
+					}
+					running = false
+				}
+			case stream := <-chStream:
+				values, jsonErrors := JSONBytesMake(stream.Messages, rwsConfig.MessageType)
+				if jsonErrors == nil {
+					err = wsutil.WriteServerMessage(wsConnection, ws.OpBinary, values)
+				} else {
+					err = wsutil.WriteServerMessage(wsConnection, ws.OpBinary, []byte(jsonErrors.Error()))
+				}
+
+				if err != nil {
+					// handle error
+					chClose <- true
+					log.Printf("WebSocket write error: %v (%v)\n", err, stream)
+					running = false
+				} else {
+					for _, xMessage := range stream.Messages {
+						// TODO: call single command with multiply message ids
+						client.XDel(ctx, stream.Stream, xMessage.ID)
+					}
 				}
 			}
 		}
