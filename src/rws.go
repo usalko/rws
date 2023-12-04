@@ -216,6 +216,19 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					chError <- err
 					return
 				}
+				if len(existedStreams) == 0 {
+					// Fallback to exists query
+					streamKeyExists, err := client.Exists(ctx, stream).Result()
+					if err != nil {
+						fmt.Printf("Can't request exist key %v: %v\n", streams, err)
+						chError <- err
+						return
+					}
+					if streamKeyExists != 0 {
+						existedStreams = []string{stream}
+					}
+				}
+
 				fmt.Printf("Success scan the stream: %v\nExisted streams: %v\n", stream, existedStreams)
 				streamsRequest = append(streamsRequest, existedStreams...)
 			}
