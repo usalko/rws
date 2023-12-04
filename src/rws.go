@@ -216,7 +216,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					chError <- err
 					return
 				}
-				fmt.Printf("Success scan the stream: %v", stream)
+				fmt.Printf("Success scan the stream: %v\nExisted streams: %v\n", stream, existedStreams)
 				streamsRequest = append(streamsRequest, existedStreams...)
 			}
 
