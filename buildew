@@ -1,15 +1,32 @@
 #!/bin/bash
 
 COMMAND=$1
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    --python-version)
+        PYTHON_VERSION="$2"
+        shift
+        shift
+        ;;
+    *)
+        COMMAND=$1
+        shift
+        break
+        ;;
+    esac
+    shift
+done
+
+# =============================================================================
 
 if [ $COMMAND == "build" ]; then
-    docker build -f Dockerfile -t usalko/rws:1.0.0 . --progress=plain
+    docker build -f Dockerfile -t usalko/rws:1.0.1 . --progress=plain
 fi
 
 if [ $COMMAND == "publish" ]; then
-    IMAGE=usalko/rws:1.0.0
+    IMAGE=usalko/rws:1.0.1
     docker push "$IMAGE" || {
-        echo "Line 274: Error in push to dockerhub image $IMAGE... Exit..."
+        echo "Line 12: Error in push to dockerhub image $IMAGE... Exit..."
         exit 1
     }
 fi
@@ -26,5 +43,158 @@ if [ $COMMAND == "test" ]; then
         http://localhost:8801/ws
 fi
 
+function login {
+    API_URL=$1 # TODO: parse tail API v1
+    LOGIN_URL="$API_URL/auth/login/"
+    USERNAME=$2
+    PASSWORD=$3
 
+    curl $LOGIN_URL \
+        -H 'sec-ch-ua: "Google Chrome";v="117", "Not;A=Brand";v="8", "Chromium";v="117"' \
+        -H 'sec-ch-ua-mobile: ?0' \
+        -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36' \
+        -H 'Content-Type: multipart/form-data; boundary=----WebKitFormBoundarywElO2kdAa6dntiN0' \
+        -H 'Accept: application/json, text/plain, */*' \
+        -H "Referer: $API_URL" \
+        -H 'sec-ch-ua-platform: "Linux"' \
+        --data-raw $'------WebKitFormBoundarywElO2kdAa6dntiN0\r\nContent-Disposition: form-data; name="email"\r\n\r\n'$USERNAME$'\r\n------WebKitFormBoundarywElO2kdAa6dntiN0\r\nContent-Disposition: form-data; name="password"\r\n\r\n'$PASSWORD$'\r\n------WebKitFormBoundarywElO2kdAa6dntiN0--\r\n' \
+        --compressed \
+        -s | jq -r '.authorization_header'
+}
 
+function mobile_login {
+    API_URL=$1 # TODO: parse tail API v1
+    MOBILE_LOGIN_URL=$API_URL/mobile/auth/login/
+    PHONE=$2
+    CODE=$3
+
+    curl -X 'POST' \
+    "$MOBILE_LOGIN_URL" \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -d $'{"phone_number": "'$PHONE$'", "code": "'$CODE$'"}' \
+    -s | jq -r '.authorization_header'
+}
+
+if [ $COMMAND == "test2" ]; then
+    echo ok
+    # curl --include \
+    #     --no-buffer \
+    #     --header "Connection: Upgrade" \
+    #     --header "Upgrade: websocket" \
+    #     --header "Host: localhost:8002" \
+    #     --header "Origin: http://localhost:8002" \
+    #     --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+    #     --header "Sec-WebSocket-Version: 13" \
+    #     http://localhost:8002/ws
+fi
+
+if [ $COMMAND == "test3" ]; then
+    login https://dev.aps.biacorp.ru/api/v1 ivict@rambler.ru
+    # curl --include \
+    #     --no-buffer \
+    #     --header "Connection: Upgrade" \
+    #     --header "Upgrade: websocket" \
+    #     --header "Host: dev.aps.biacorp.ru" \
+    #     --header "Origin: https://dev.aps.biacorp.ru " \
+    #     --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+    #     --header "Sec-WebSocket-Version: 13" \
+    #     --header "Authorization: Token $1" \
+    #     https://dev.aps.biacorp.ru/ws
+fi
+
+if [ $COMMAND == "test4" ]; then
+    curl --include \
+        --no-buffer \
+        --header "Connection: Upgrade" \
+        --header "Upgrade: websocket" \
+        --header "Host: ems.biacorp.ru" \
+        --header "Origin: https://ems.biacorp.ru " \
+        --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+        --header "Sec-WebSocket-Version: 13" \
+        https://ems.biacorp.ru/ws
+fi
+
+if [ $COMMAND == "test5" ]; then
+    API_URL=https://aps.biacorp.ru/api/v1
+    PASSWORD=$3
+    if [ "x$PASSWORD" == "x" ]; then
+        echo login to the $API_URL
+        echo user: $USERNAME
+        echo password:
+        read -s PASSWORD
+    fi
+
+    TOKEN=$(login $API_URL ivict@rambler.ru $PASSWORD)
+    echo token is $TOKEN
+    curl --include \
+        --no-buffer \
+        --header "Connection: Upgrade" \
+        --header "Upgrade: websocket" \
+        --header "Host: aps.biacorp.ru" \
+        --header "Origin: https://aps.biacorp.ru " \
+        --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+        --header "Sec-WebSocket-Version: 13" \
+        --header "Authorization: $TOKEN" \
+        https://aps.biacorp.ru/ws
+fi
+
+if [ $COMMAND == "test6" ]; then
+    curl --include \
+        --no-buffer \
+        --header "Connection: Upgrade" \
+        --header "Upgrade: websocket" \
+        --header "Host: dev.aps.biacorp.ru" \
+        --header "Origin: https://dev.aps.biacorp.ru " \
+        --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+        --header "Sec-WebSocket-Version: 13" \
+        https://dev.aps.biacorp.ru/ws
+fi
+
+if [ $COMMAND == "test7" ]; then
+    # API_HOST=aps.biacorp.ru
+    # API_HOST=dev.aps.biacorp.ru
+    API_HOST=ems.biacorp.ru
+    # API_HOST=dev.ems.biacorp.ru
+    # API_HOST=tms.biacorp.ru
+    # API_HOST=dev.tms.biacorp.ru
+    # API_HOST=localhost:8002
+    # API_HOST=localhost:8004
+    # API_HOST=localhost:8006
+
+    ENDPOINT=https://$API_HOST
+    if [[ "$API_HOST" =~ ^local.* ]]; then
+	ENDPOINT=http://$API_HOST
+    fi
+ 
+    PHONE=$3
+    CODE=$4
+    if [ "x$PHONE" == "x" ] || [ "x$CODE" == "x" ]; then
+        echo Mobile login to the $ENDPOINT
+        echo phone:
+        read PHONE
+        echo code:
+        read -s CODE
+    fi
+
+    MOBILE_TOKEN=$(mobile_login "$ENDPOINT/api/v1" $PHONE $CODE)
+    echo token is $MOBILE_TOKEN
+    curl --include \
+        --no-buffer \
+        --header "Connection: Upgrade" \
+        --header "Upgrade: websocket" \
+        --header "Host: $API_HOST" \
+        --header "Origin: $ENDPOINT " \
+        --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+        --header "Sec-WebSocket-Version: 13" \
+        --header "Authorization: $MOBILE_TOKEN" \
+        $ENDPOINT/mobile/ws
+#    curl --include \
+#        --no-buffer \
+#        --header "Host: $API_HOST" \
+#        --header "Origin: $ENDPOINT " \
+#        --header "Sec-WebSocket-Key: MTIzNDU2Nzg5MDEyMzQ1Ng==" \
+#        --header "Sec-WebSocket-Version: 13" \
+#        --header "Authorization: $MOBILE_TOKEN" \
+#        $ENDPOINT/api/v1/mobile/ws
+fi
