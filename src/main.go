@@ -9,8 +9,8 @@ import (
 	"os/signal"
 )
 
-const productVersion = "1.0.0"
-const releaseTag = "lola simon"
+const productVersion = "1.0.3"
+const releaseTag = "maria hill"
 
 func main() {
 	configFile := flag.String("config", "config.yaml", "Config file location")

@@ -258,7 +258,14 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				for i, xStream := range xStreams {
-					readStreamsRequest[i+idsOffset] = Last(xStream.Messages).ID
+					lastMessage := Last(xStream.Messages)
+					readStreamsRequest[i+idsOffset] = lastMessage.ID
+					// Detect close channel message
+					noun, verb := lastMessage.Values["CLOSE"]
+					if verb && noun == "CHANNEL" {
+						chError <- errors.New("Close channel by command CLOSE: CHANNEL")
+						return
+					}
 					// Send response from redis to channel
 					chStream <- xStream
 				}
