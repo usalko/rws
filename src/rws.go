@@ -240,22 +240,26 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			idsOffset := len(streamsRequest)
-			ids := make([]string, idsOffset)
-			for i := 0; i < len(streamsRequest); i++ {
-				ids[i] = "0" // '$' argument see redis documentation
+			readStreamsRequest := make([]string, idsOffset*2)
+			for i := 0; i < idsOffset; i++ {
+				readStreamsRequest[i] = streamsRequest[i]
+				readStreamsRequest[i+idsOffset] = "0" // For blocking request we could use '$' argument see redis documentation
 			}
-			streamsRequest = append(streamsRequest, ids...)
+
 			for {
 				xStreams, err := client.XRead(ctx, &redis.XReadArgs{
-					Streams: streamsRequest,
+					Streams: readStreamsRequest,
 					Block:   0,
 				}).Result()
+
 				if err != nil {
 					fmt.Printf("Can't read streams %v: %v\n", streams, err)
 					chError <- err
 					return
 				}
-				for _, xStream := range xStreams {
+				for i, xStream := range xStreams {
+					readStreamsRequest[i+idsOffset] = Last(xStream.Messages).ID
+					// Send response from redis to channel
 					chStream <- xStream
 				}
 			}
@@ -293,6 +297,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case stream := <-chStream:
 				values, jsonErrors := JSONBytesMake(stream.Messages, rwsConfig.MessageType)
 				if jsonErrors == nil {
+					// log.Printf("WRITE MESSAGE: %v (%v)\n", values, jsonErrors)
 					err = wsutil.WriteServerMessage(wsConnection, ws.OpBinary, values)
 				} else {
 					err = wsutil.WriteServerMessage(wsConnection, ws.OpBinary, []byte(jsonErrors.Error()))

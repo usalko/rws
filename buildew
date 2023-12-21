@@ -20,11 +20,11 @@ done
 # =============================================================================
 
 if [ $COMMAND == "build" ]; then
-    docker build -f Dockerfile -t usalko/rws:1.0.1 . --progress=plain
+    docker build -f Dockerfile -t usalko/rws:1.0.2 . --progress=plain
 fi
 
 if [ $COMMAND == "publish" ]; then
-    IMAGE=usalko/rws:1.0.1
+    IMAGE=usalko/rws:1.0.2
     docker push "$IMAGE" || {
         echo "Line 12: Error in push to dockerhub image $IMAGE... Exit..."
         exit 1
@@ -69,11 +69,11 @@ function mobile_login {
     CODE=$3
 
     curl -X 'POST' \
-    "$MOBILE_LOGIN_URL" \
-    -H 'accept: application/json' \
-    -H 'Content-Type: application/json' \
-    -d $'{"phone_number": "'$PHONE$'", "code": "'$CODE$'"}' \
-    -s | jq -r '.authorization_header'
+        "$MOBILE_LOGIN_URL" \
+        -H 'accept: application/json' \
+        -H 'Content-Type: application/json' \
+        -d $'{"phone_number": "'$PHONE$'", "code": "'$CODE$'"}' \
+        -s | jq -r '.authorization_header'
 }
 
 if [ $COMMAND == "test2" ]; then
@@ -164,9 +164,9 @@ if [ $COMMAND == "test7" ]; then
 
     ENDPOINT=https://$API_HOST
     if [[ "$API_HOST" =~ ^local.* ]]; then
-	ENDPOINT=http://$API_HOST
+        ENDPOINT=http://$API_HOST
     fi
- 
+
     PHONE=$3
     CODE=$4
     if [ "x$PHONE" == "x" ] || [ "x$CODE" == "x" ]; then
