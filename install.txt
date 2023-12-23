@@ -1,3 +1,5 @@
+# FIXME:
+
 ## How to use
 * create your `config.yaml` file, you can call `k2ws -init` to begin with
 * download and run [binary](https://github.com/Effyis/redis2websocket/releases) for your OS (`config.yaml` should be in the same directory)
