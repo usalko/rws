@@ -20,7 +20,7 @@ redis.to.websocket:
       # group.id is not defined so client should set group.id by passing `group.id` query parameter
       enable.auto.commit: false # default is `true`
     # redis.streams is not defined so client should set stream(s) by passing comma separated list of streams to `streams` query parameter
-    address: :8801 # it would be fine to use the same port 8888 too
+    address: :8802 # it would be fine to use the same port 8888 too
     endpoint.websocket: ws # default is ""
     endpoint.test: "" # default is "test"
     include.headers: true # default is `false`

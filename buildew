@@ -20,11 +20,11 @@ done
 # =============================================================================
 
 if [ $COMMAND == "build" ]; then
-    docker build -f Dockerfile -t usalko/rws:1.0.3 . --progress=plain
+    docker build -f Dockerfile -t usalko/rws:1.0.4 . --progress=plain
 fi
 
 if [ $COMMAND == "publish" ]; then
-    IMAGE=usalko/rws:1.0.3
+    IMAGE=usalko/rws:1.0.4
     docker push "$IMAGE" || {
         echo "Line 12: Error in push to dockerhub image $IMAGE... Exit..."
         exit 1

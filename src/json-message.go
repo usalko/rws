@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
+
 	// "regexp"
 
 	"github.com/redis/go-redis/v9"
@@ -24,21 +27,36 @@ import (
 // JSONBytesMake converts redis XMessage into JSON byte slice
 func JSONBytesMake(messages []redis.XMessage, messageType string) ([]byte, error) {
 
-	bytes, err := json.Marshal(messages)
-	// var val string
-	// if messageType == "json" {
-	// 	val = ",\"value\":\"" + msg.ID + "\"}"
-	// 	// } else if messageType == "binary" {
-	// 	// 	val = ",\"value\":\"" + base64.StdEncoding.EncodeToString(msg.ID) + "\"}"
-	// } else {
-	// 	if jsonVal, err := json.Marshal(msg.ID); err == nil {
-	// 		val = ",\"value\":" + string(jsonVal) + "}"
-	// 	} else {
-	// 		err = fmt.Errorf("Can't stringify value as string: %v", err)
-	// 	}
-	// }
+	if messageType == "json" {
+		jsonMessages := messages
+		for i, message := range messages {
+			unescapedValues := make(map[string]interface{})
+			for key, value := range message.Values {
+				textValue := fmt.Sprintf("%v", value)
+				// Unpack json object (cause redis doesn't have complex field types)
+				if strings.HasPrefix(textValue, "{") || strings.HasPrefix(textValue, "[") {
+					var objectValue map[string]interface{}
+					err := json.Unmarshal([]byte(textValue), &objectValue)
+					if err != nil {
+						return nil, err
+					}
+					unescapedValues[key] = objectValue
+				} else {
+					unescapedValues[key] = value
+				}
+			}
+			jsonMessages[i] = redis.XMessage{
+				ID:     message.ID,
+				Values: unescapedValues,
+			}
+		}
 
-	// return rexJSONVal.ReplaceAll(bytes, []byte(val)), err
+		bytes, err := json.Marshal(jsonMessages)
+
+		return bytes, err
+	}
+
+	bytes, err := json.Marshal(messages)
 
 	return bytes, err
 }

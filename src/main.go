@@ -3,14 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
 )
 
-const productVersion = "1.0.3"
-const releaseTag = "maria hill"
+const productVersion = "1.0.4"
+const releaseTag = "serena singh"
 
 func main() {
 	configFile := flag.String("config", "config.yaml", "Config file location")
@@ -22,8 +21,8 @@ func main() {
 		fmt.Printf("Rws %s (%s)\n", productVersion, releaseTag)
 	} else if *initiate {
 		if _, err := os.Stat(*configFile); os.IsNotExist(err) {
-			if err := ioutil.WriteFile(*configFile, []byte(initConfig), 0644); err == nil {
-				fmt.Printf("Config file %s successkfully created.\n", *configFile)
+			if err := os.WriteFile(*configFile, []byte(initConfig), 0644); err == nil {
+				fmt.Printf("Config file %s successfully created.\n", *configFile)
 			} else {
 				fmt.Printf("Can't create config file %s :\n%v", *configFile, err)
 			}
