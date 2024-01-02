@@ -1,52 +1,52 @@
 # FIXME:
 
 ## How to use
-* create your `config.yaml` file, you can call `k2ws -init` to begin with
-* download and run [binary](https://github.com/Effyis/redis2websocket/releases) for your OS (`config.yaml` should be in the same directory)
+* create your `config.yaml` file, you can call `rws -init` to begin with
+* download and run [binary](https://github.com/usalko/rws/releases) for your OS (`config.yaml` should be in the same directory)
 
 ### Simple setup
-![Simple K2WS](https://raw.githubusercontent.com/Effyis/redis2websocket/master/docs/imgs/k2ws-simple.png)
+![Simple Rws](https://raw.githubusercontent.com/usalko/rws/main/docs/imgs/rws-simple.png)
 
 ```yaml
 schema.version: "1.0"
 redis.to.websocket:
   - redis.client.config:
       metadata.broker.list: redis:9092
-      group.id: k2ws-group
+      group.id: rws-group
     redis.streams:
       - test
     address: :80
 ```
 
 ### Complex setup
-![Complex K2WS](https://raw.githubusercontent.com/Effyis/redis2websocket/master/docs/imgs/k2ws-complex.png)
+![Complex Rws](https://raw.githubusercontent.com/usalko/rws/main/docs/imgs/rws-complex.png)
 ```yaml
 schema.version: "1.0"
 # domain certificate files are located in certs folder
-tls.cert.file: ./certs/k2ws.socialgist.com.crt
-tls.key.file: ./certs/k2ws.socialgist.com.key
+tls.cert.file: ./certs/rws.socialgist.com.crt
+tls.key.file: ./certs/rws.socialgist.com.key
 redis.to.websocket:
-  # WebSocket X | wss://k2ws.socialgist.com/redisA
+  # WebSocket X | wss://rws.socialgist.com/redisA
   - redis.client.config:
       metadata.broker.list: redisA:9092
-      group.id: k2ws-wsx-group
+      group.id: rws-wsx-group
     redis.streams:
       - a1
       - a2
     address: :443
     endpoint.prefix: redis_a
-  # WebSocket X | wss://k2ws.socialgist.com/redisB
+  # WebSocket X | wss://rws.socialgist.com/redisB
   - redis.client.config:
       metadata.broker.list: redisB:9092
-      group.id: k2ws-wsx-group
+      group.id: rws-wsx-group
     redis.streams:
       - b1
     address: :443
     endpoint.prefix: redis_b
-  # WebSocket Y | wss://k2ws.socialgist.com/redisC
+  # WebSocket Y | wss://rws.socialgist.com/redisC
   - redis.client.config:
       metadata.broker.list: redisC:9092
-      group.id: k2ws-wsy-group
+      group.id: rws-wsy-group
     redis.streams:
       - c1
     address: :443
@@ -79,7 +79,7 @@ Every `redis.to.websocket` entry will have it's own test page. By default this p
 
 Test page can open up websocket and start consuming Redis stream(s). It will display message for 1 second by default and then it will display another message that came at the current time, meaning that some messages will not be shown when message rate is high (higher then 1 message per second). Even though messages are not displayed, they will still be consumed and processed by the page. Test page has handy filtering capability that makes it possible to execute small JavaScript code for each message in which you can decide what you want to do with the message and want you want to display.
 
-![K2WS test page](https://raw.githubusercontent.com/Effyis/redis2websocket/master/docs/imgs/k2ws-testpage.png)
+![Rws test page](https://raw.githubusercontent.com/usalko/rws/main/docs/imgs/rws-testpage.png)
 
 * `Open` - Opens up websocket connection (redis stream(s) consumption will start).
 * `Close` - Closes websocket connection (redis stream(s) consumption will stop).
@@ -96,7 +96,7 @@ Test page can open up websocket and start consuming Redis stream(s). It will dis
 Incoming (or filtered) messages are displayed on the bottom left text area. Filter editor is displayed on the bottom right when filtering is activated.
 
 ## Updating static HTTP files
-Add/remove/modify files in `k2ws/static` directory and using [esc](https://github.com/mjibson/esc) tool from inside `k2ws` directory run `esc -o static.go static`. This will re-create `static.go`. 
+Add/remove/modify files in `rws/static` directory and using [esc](https://github.com/mjibson/esc) tool from inside `rws` directory run `esc -o static.go static`. This will re-create `static.go`. 
 
 ## Build
 
@@ -106,21 +106,21 @@ You can build it statically with `go build -tags static`. Check out [confluentin
 
 ### Build with Docker (Linux)
 ```sh
-docker build -f Dockerfile.build --no-cache -t k2ws-build . && \
-docker run --rm -v $PWD/build:/build k2ws-build
+docker build -f Dockerfile.build --no-cache -t rws-build . && \
+docker run --rm -v $PWD/build:/build rws-build
 ```
 
-You'll end up with `./build/k2ws` executable that works on Linux.
+You'll end up with `./build/rws` executable that works on Linux.
 
 ### Build and run with Docker
 **Build**
 ```sh
-docker build -f Dockerfile.k2ws -t k2ws .
+docker build -f Dockerfile.rws -t rws .
 ```
 
 **Run**
 ```sh
-docker run -d --name=k2ws --net=host -v _PATH_TO_CONFIG_:/config.yaml k2ws
+docker run -d --name=rws --net=host -v _PATH_TO_CONFIG_:/config.yaml rws
 ```
 
 ### Build for Windows

@@ -23,21 +23,23 @@ type RWS struct {
 	TLSCertFile string
 	TLSKeyFile  string
 	SourceFile  string
-	WebSockets  map[string]*RWSRedis
+	WebSockets  map[string]*RwsRedis
 	TestUIs     map[string]*string
 }
 
-// RWSRedis Redis config
-type RWSRedis struct {
-	RedisClientConfig        map[string]interface{}
-	RedisDefaultStreamConfig map[string]interface{}
-	RedisStreams             []string
-	MessageType              string
-	Compression              bool
+// RwsRedis Redis config
+type RwsRedis struct {
+	RedisClientConfig             map[string]interface{}
+	RedisDefaultStreamConfig      map[string]interface{}
+	RedisStreamsToWs              []string
+	WsToRedisStreams              []string
+	RedisStreamsToWsMessageFormat string
+	WsToRedisStreamsMessageFormat string
+	Compression                   bool
 }
 
 type TemplateInfo struct {
-	TestPath, WSURL string
+	TestPath, WsURL string
 }
 
 var localStatic = false
@@ -94,12 +96,42 @@ func redisOptionsFromRwsConfiguration(redisClientConfig map[string]interface{}, 
 	}
 }
 
-func redisStreams(query url.Values, defaultStreams []string) []string {
-	streams := query.Get("topics")
-	if streams != "" {
-		return strings.Split(streams, ",")
+// Parse query input.streams, output.streams, input.format, output.format
+// Output:
+//   - streamsToWs
+//   - wsToStreams
+//   - streamsToWsMessageFormat
+//   - wsToStreamsMessageFormat
+func parseQuery(query url.Values, rwsConfig RwsRedis) ([]string, []string, string, string) {
+	var streamsToWs []string
+	if query.Get("input.streams") != "" {
+		streamsToWs = strings.Split(query.Get("input.streams"), ",")
+	} else {
+		streamsToWs = rwsConfig.RedisStreamsToWs
 	}
-	return defaultStreams
+
+	var wsToStreams []string
+	if query.Get("output.streams") != "" {
+		wsToStreams = strings.Split(query.Get("output.streams"), ",")
+	} else {
+		wsToStreams = rwsConfig.RedisStreamsToWs
+	}
+
+	var streamsToWsMessageFormat string
+	if query.Get("input.format") != "" {
+		streamsToWsMessageFormat = query.Get("input.format")
+	} else {
+		streamsToWsMessageFormat = rwsConfig.RedisStreamsToWsMessageFormat
+	}
+
+	var wsToStreamsMessageFormat string
+	if query.Get("output.format") != "" {
+		wsToStreamsMessageFormat = query.Get("output.format")
+	} else {
+		wsToStreamsMessageFormat = rwsConfig.WsToRedisStreamsMessageFormat
+	}
+
+	return streamsToWs, wsToStreams, streamsToWsMessageFormat, wsToStreamsMessageFormat
 }
 
 func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -161,8 +193,8 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		options := redisOptionsFromRwsConfiguration(rwsConfig.RedisClientConfig, query)
 
-		streams := redisStreams(query, rwsConfig.RedisStreams)
-		if len(streams) == 0 {
+		streamsToWs, _, streamsToWsMessageFormat, _ := parseQuery(query, *rwsConfig)
+		if len(streamsToWs) == 0 {
 			log.Printf("No stream(s), please setup 'default.stream.config' section in configuration (%s) or pass topic(s) as query parameter.", rws.SourceFile)
 			return
 		}
@@ -202,17 +234,17 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer client.Close()
 
-			if len(streams) == 0 {
+			if len(streamsToWs) == 0 {
 				chError <- errors.New("no streams for listening")
 				return
 			}
 
 			// Filter for existing streams
 			streamsRequest := make([]string, 0)
-			for _, stream := range streams {
+			for _, stream := range streamsToWs {
 				existedStreams, _, err := client.Scan(ctx, 0, stream, -1).Result()
 				if err != nil {
-					fmt.Printf("Can't read streams %v: %v\n", streams, err)
+					fmt.Printf("Can't read streams %v: %v\n", streamsToWs, err)
 					chError <- err
 					return
 				}
@@ -220,7 +252,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					// Fallback to exists query
 					streamKeyExists, err := client.Exists(ctx, stream).Result()
 					if err != nil {
-						fmt.Printf("Can't request exist key %v: %v\n", streams, err)
+						fmt.Printf("Can't request exist key %v: %v\n", streamsToWs, err)
 						chError <- err
 						return
 					}
@@ -234,7 +266,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if len(streamsRequest) == 0 {
-				errorDescription := fmt.Sprintf("The streams: %v not found in redis\n", streams)
+				errorDescription := fmt.Sprintf("The streams: %v not found in redis\n", streamsToWs)
 				chError <- errors.New(errorDescription)
 				return
 			}
@@ -253,7 +285,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}).Result()
 
 				if err != nil {
-					fmt.Printf("Can't read streams %v: %v\n", streams, err)
+					fmt.Printf("Can't read streams %v: %v\n", streamsToWs, err)
 					chError <- err
 					return
 				}
@@ -284,7 +316,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				switch e := ev.(type) {
 				case redis.Error:
 					if e.Error() == "redis: nil" {
-						log.Printf("%% Error: %v perhaps stream(s) %v didn't exists\n", e, streams)
+						log.Printf("%% Error: %v perhaps stream(s) %v didn't exists\n", e, streamsToWs)
 					} else {
 						log.Printf("%% Error: %v\n", e)
 					}
@@ -302,7 +334,7 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					running = false
 				}
 			case stream := <-chStream:
-				values, jsonErrors := JSONBytesMake(stream.Messages, rwsConfig.MessageType)
+				values, jsonErrors := jsonBytesMake(stream.Messages, streamsToWsMessageFormat)
 				if jsonErrors == nil {
 					// log.Printf("WRITE MESSAGE: %v (%v)\n", values, jsonErrors)
 					err = wsutil.WriteServerMessage(wsConnection, ws.OpBinary, values)

@@ -5,12 +5,14 @@ redis.to.websocket:
   # first Redis config entry
   - redis.client.config:
       metadata.broker.list: redis:6379 # required
-      group.id: k2ws-test-group
+      group.id: rws-test-group
     redis.default.stream.config:
       auto.offset.reset: earliest # default is "largest"
-    redis.streams:
+    redis.streams.to.ws:
       - test1
       - test2
+    ws.to.redis.streams:
+      - test3
     address: :8800
     endpoint.prefix: ws # default is ""
 

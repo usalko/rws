@@ -24,8 +24,8 @@ import (
 
 // var rexJSONVal = regexp.MustCompile(`}$`)
 
-// JSONBytesMake converts redis XMessage into JSON byte slice
-func JSONBytesMake(messages []redis.XMessage, messageType string) ([]byte, error) {
+// jsonBytesMake converts redis XMessage into JSON byte slice
+func jsonBytesMake(messages []redis.XMessage, messageType string) ([]byte, error) {
 
 	if messageType == "json" {
 		jsonMessages := messages

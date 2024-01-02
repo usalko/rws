@@ -131,7 +131,7 @@
                     set: function(val) {
                         rec._recording = val;
                         if (rec._recording) {
-                            rec.baseFile = rec.baseFile || "k2ws-dump";
+                            rec.baseFile = rec.baseFile || "rws-dump";
                         } else {
                             rec.download(true);
                             rec.baseFile = '';
@@ -335,7 +335,7 @@
             };
             document.getElementById("recording").onclick = function (evt) {
                 if (!$$recording.recording) {
-                    var basefilename = prompt("File name:", 'k2ws-' + (new Date()).toISOString().replace(/T.*/,'-') + Date.now().toString().substr(10) + '-dump');
+                    var basefilename = prompt("File name:", 'rws-' + (new Date()).toISOString().replace(/T.*/,'-') + Date.now().toString().substr(10) + '-dump');
                     if (!basefilename) return false;
                     var ident = prompt("JSON ident:", $$recording.identJSON.toString());
                     if (!ident) return false;

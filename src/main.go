@@ -8,8 +8,8 @@ import (
 	"os/signal"
 )
 
-const productVersion = "1.0.4"
-const releaseTag = "serena singh"
+const productVersion = "1.1.5"
+const releaseTag = "stephanie copeland"
 
 func main() {
 	configFile := flag.String("config", "config.yaml", "Config file location")
@@ -30,7 +30,7 @@ func main() {
 			fmt.Printf("Config file %s already exists.\n", *configFile)
 		}
 	} else {
-		list := ReadRWS(*configFile)
+		list := ReadRws(*configFile)
 		for i := range list {
 			go func(rws *RWS) {
 				err := rws.Start()
