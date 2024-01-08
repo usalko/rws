@@ -33,9 +33,11 @@ redis.to.websocket:
     address: :9999
     # endpoint.prefix: ""
     # endpoint.websocket: ws
-    # endpoint.test: test
+    endpoint.test: test
+	# Url for async-api specification (for example https://example.com/api/v1/spec.yaml)
+    endpoint.test.api.yaml: /test/async-api.example.yaml
 	# compression: false
-`
+	`
 
 // ConfigRws Redis to websocket YAML
 type ConfigRws struct {
@@ -46,6 +48,7 @@ type ConfigRws struct {
 	Address                       string                 `yaml:"address"`
 	EndpointPrefix                string                 `yaml:"endpoint.prefix"`
 	EndpointTest                  string                 `yaml:"endpoint.test"`
+	EndpointTestApiYaml           string                 `yaml:"endpoint.test.api.yaml"`
 	EndpointWS                    string                 `yaml:"endpoint.websocket"`
 	RedisStreamsToWsMessageFormat string                 `yaml:"redis.streams.to.ws.message.format"`
 	WsToRedisStreamsMessageFormat string                 `yaml:"ws.to.redis.streams.message.format"`
@@ -112,6 +115,7 @@ func ReadRws(filename string) []*RWS {
 			rwsConfig.WsToRedisStreamsMessageFormat = "json"
 		}
 		testPath := rwsConfig.EndpointTest
+		// testPathApiYaml := rwsConfig.EndpointTestApiYaml
 		wsPath := rwsConfig.EndpointWS
 		if testPath == "" && wsPath == "" {
 			testPath = "test"

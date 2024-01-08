@@ -1,0 +1,61 @@
+#!/bin/bash
+
+
+BUN_VERSION=1.0.20
+COMMAND=$1
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    --bun-version)
+        BUN_VERSION="$2"
+        shift
+        shift
+        ;;
+    *)
+        COMMAND=$1
+        shift
+        break
+        ;;
+    esac
+    shift
+done
+
+BUN=bun
+
+if command -v "$BUN" &>/dev/null; then
+    echo Bun available
+else
+    echo "Bun not available, please install it (curl -fsSL https://bun.sh/install | bash) or add to the PATH variable"
+    exit 1
+fi
+
+# CURRENT_BUN_VERSION=$($BUN --version)
+NUE=nue
+if command -v "$BUE" &>/dev/null; then
+    echo Nue available
+else
+    echo "Nue not available, installing..."
+    $BUN install nuekit --global
+fi
+
+# =================================================================================================
+
+if [ "$COMMAND" == "build" ]; then
+    echo Nuew build "$@"
+
+    # shellcheck disable=SC2068
+    $NUE build --production --environment site.yaml $@
+fi
+
+if [ "$COMMAND" == "run" ]; then
+    echo Nue run "$@"
+
+    # shellcheck disable=SC2068
+    $NUE start $@
+fi
+
+
+# =================================================================================================
+
+AVAILABLE_COMMANDS="run build"
+echo ''
+[[ $AVAILABLE_COMMANDS =~ (^| )$COMMAND($| ) ]] && echo 'Ok' || echo 'Unknown command: ' "$COMMAND" && echo 'Available commands are: ' "$AVAILABLE_COMMANDS"

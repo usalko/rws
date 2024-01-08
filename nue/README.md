@@ -1,6 +1,6 @@
 # Test application for an messages API
 
-Based on AsyncAPI inciative specification [https://github.com/asyncapi]
+Based on AsyncAPI initiative specification [https://github.com/asyncapi]
 
 ## Build
 

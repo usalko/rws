@@ -1,0 +1,3 @@
+<section @name="users-view">
+    <h1>Hello, Users!</h1>
+</section>

@@ -1,0 +1,43 @@
+version: '3.9'
+
+x-containers-common: &containers-common
+  logging:
+    driver: "json-file"
+    options:
+      # see promtail configuration: promtail-config.docker-logs.yaml
+      tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+      max-size: 10m
+      max-file: '3'
+
+services:
+
+  redis:
+    <<: *containers-common
+    image: redis:7.0.9-alpine
+    restart: always
+    mem_limit: 32M
+    ports:
+      - '6379:6379'
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    command: redis-server --save 20 1 --loglevel warning
+    volumes:
+      - .data/redis:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+
+  # Web channels
+  rws:
+    <<: *containers-common
+    build:
+      context: ..
+      dockerfile: ./Dockerfile
+    restart: always
+    mem_limit: 32M
+    ports:
+      - '8801:8801'
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../config.yaml:/config.yaml

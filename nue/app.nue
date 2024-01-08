@@ -1,4 +1,3 @@
-
 <script>
   import { router } from '/@nue/app-router.js'
 </script>
@@ -9,7 +8,7 @@
     <a href="/users">Users</a>
   </nav>
 
-  <article id="container"/>
+  <article id="container" />
 
   <script>
     mounted() {

@@ -1,4 +1,3 @@
-
-
-title: Skeleton app
-globals: [style]
+title: Test (RWS)
+globals: [style, views]
+page_router: true

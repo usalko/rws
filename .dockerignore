@@ -1,3 +1,4 @@
+# IDE artifacts
 .vscode/
 build/
 certs/
@@ -5,6 +6,13 @@ deploy/
 debug
 vendor/
 __debug*
+# Local knowledge
 version.txt
+# Test web application artifacts
 nue/node_modules
 nue/.dist
+# Tests artifacts
+rws-tests/.data
+rws-tests/.history
+rws-tests/.logs
+rws-tests/.tmp
