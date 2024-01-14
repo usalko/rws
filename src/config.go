@@ -29,6 +29,8 @@ redis.to.websocket:
     # endpoint.prefix: ""
     # endpoint.websocket: ws
     # endpoint.test: test
+    # on.close.key: my.redis.stream.is_closed
+    # on.close.value: true
 `
 
 // ConfigRWS Redis to websocket YAML
@@ -40,6 +42,8 @@ type ConfigRWS struct {
 	EndpointPrefix           string                 `yaml:"endpoint.prefix"`
 	EndpointTest             string                 `yaml:"endpoint.test"`
 	EndpointWS               string                 `yaml:"endpoint.websocket"`
+	OnCloseKey               string                 `yaml:"on.close.key"`
+	OnCloseValue             string                 `yaml:"on.close.value"`
 	MessageType              string                 `yaml:"message.type"`
 	Compression              bool                   `yaml:"compression"`
 }
@@ -145,6 +149,8 @@ func ReadRWS(filename string) []*RWS {
 			RedisStreams:             rwsConfig.RedisStreams,
 			MessageType:              rwsConfig.MessageType,
 			Compression:              rwsConfig.Compression,
+			OnCloseKey:               rwsConfig.OnCloseKey,
+			OnCloseValue:             rwsConfig.OnCloseValue,
 		}
 	}
 	rwsSlice := make([]*RWS, len(rwsMap))

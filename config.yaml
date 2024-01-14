@@ -13,6 +13,8 @@ redis.to.websocket:
       - test2
     address: :8800
     endpoint.prefix: ws # default is ""
+    on.close.key: ws.close
+    on.close.value: true
 
   # second Redis config entry
   - redis.client.config:

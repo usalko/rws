@@ -34,6 +34,8 @@ type RWSRedis struct {
 	RedisStreams             []string
 	MessageType              string
 	Compression              bool
+	OnCloseKey               string
+	OnCloseValue             string
 }
 
 type TemplateInfo struct {
@@ -102,6 +104,18 @@ func redisStreams(query url.Values, defaultStreams []string) []string {
 	return defaultStreams
 }
 
+func onCloseKeyAndValue(query url.Values, defaultOnCloseKey string, defaultOnCloseValue string) (string, string) {
+	onCloseKey := query.Get("on.close.key")
+	if onCloseKey == "" {
+		onCloseKey = defaultOnCloseKey
+	}
+	onCloseValue := query.Get("on.close.value")
+	if onCloseValue == "" {
+		onCloseValue = defaultOnCloseValue
+	}
+	return onCloseKey, onCloseValue
+}
+
 func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	submatch := rexStatic.FindStringSubmatch(r.URL.Path)
 	if len(submatch) > 0 {
@@ -166,6 +180,9 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			log.Printf("No stream(s), please setup 'default.stream.config' section in configuration (%s) or pass topic(s) as query parameter.", rws.SourceFile)
 			return
 		}
+
+		// Read close socket event details from query string
+		onCloseKey, onCloseValue := onCloseKeyAndValue(query, rwsConfig.OnCloseKey, rwsConfig.OnCloseValue)
 
 		// Instantiate client
 		client := redis.NewClient(&options)
@@ -322,6 +339,9 @@ func (rws *RWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
+		}
+		if onCloseKey != "" {
+			client.Set(ctx, onCloseKey, onCloseValue, 0)
 		}
 		log.Printf("Websocket closed %s\n", r.Host)
 		return
